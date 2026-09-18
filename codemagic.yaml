@@ -1,0 +1,85 @@
+workflows:
+  ios-native-quick-start:
+    name: HomeMaintenanceAssistant
+    max_build_duration: 120
+    instance_type: mac_mini_m2
+
+    integrations:
+      app_store_connect: HomeMaintenanceAssistant
+
+    environment:
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.qxqload.saker
+
+      vars:
+        BUNDLE_ID: $bundle_identifier
+        PROJECT_PATH: "HomeMaintenanceAssistant"
+        XCODE_WORKSPACE: "$PROJECT_PATH/$PROJECT_PATH.xcworkspace"
+        XCODE_SCHEME: $PROJECT_PATH
+        APP_STORE_APPLE_ID: 6811632368
+
+      xcode: latest
+      cocoapods: default
+
+    scripts:
+      - name: Install CocoaPods dependencies
+        script: |
+          cd "$CM_BUILD_DIR/$PROJECT_PATH"
+          pod install
+
+      - name: Set up provisioning profiles settings on Xcode project
+        script: |
+          xcode-project use-profiles
+
+      - name: Increment build number
+        script: |
+          cd "$CM_BUILD_DIR/$PROJECT_PATH"
+
+          echo "Current project directory:"
+          pwd
+
+          echo "Xcode projects:"
+          find . -name "*.xcodeproj" -maxdepth 2 -print
+
+          LATEST_BUILD_NUMBER=$(app-store-connect get-latest-app-store-build-number "$APP_STORE_APPLE_ID" || echo "0")
+
+          if ! [[ "$LATEST_BUILD_NUMBER" =~ ^[0-9]+$ ]]; then
+            LATEST_BUILD_NUMBER=0
+          fi
+
+          NEW_BUILD_NUMBER=$((LATEST_BUILD_NUMBER + 1))
+
+          echo "Latest App Store Connect Build: $LATEST_BUILD_NUMBER"
+          echo "New Build Number: $NEW_BUILD_NUMBER"
+
+          xcrun agvtool new-version -all "$NEW_BUILD_NUMBER"
+
+          echo "Build number after modification:"
+          xcrun agvtool what-version
+
+      - name: Build ipa for distribution
+        script: |
+          xcode-project build-ipa \
+            --workspace "$CM_BUILD_DIR/$XCODE_WORKSPACE" \
+            --scheme "$XCODE_SCHEME"
+
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.app
+      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
+
+    publishing:
+      email:
+        recipients:
+          - 985446278@qq.com
+          - user_2@example.com
+        notify:
+          success: true
+          failure: false
+
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: false
+        submit_to_app_store: false
